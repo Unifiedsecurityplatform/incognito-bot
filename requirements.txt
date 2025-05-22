@@ -1,2 +1,4 @@
-aiosqlite==2.25.2
+aiosqlite==0.21.0
+aiogram==2.25.2
 typing_extensions==4.13.2
+python-dotenv==1.0.1
