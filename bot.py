@@ -250,7 +250,8 @@ async def handle_swipe(call: types.CallbackQuery):
 async def main():
     await create_db()
     print("Bot is polling...")
-    await dp.start_polling(bot, skip_updates=True)
+    await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     import asyncio
