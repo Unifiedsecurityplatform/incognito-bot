@@ -19,7 +19,8 @@ WEBHOOK_PATH = f"/webhook/{WEBHOOK_SECRET}"
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(storage=storage)
+
 
 DB_NAME = "users.db"
 
