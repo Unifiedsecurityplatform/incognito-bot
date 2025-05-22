@@ -1,2 +1,2 @@
-aiosqlite==0.21.0
+aiosqlite==2.25.2
 typing_extensions==4.13.2
