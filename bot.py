@@ -9,6 +9,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import setup_application
 from dotenv import load_dotenv
+from aiogram import Router, F
+from aiogram.filters import Command, StateFilter
+from aiogram.types import Message
+
+router = Router()
+
+@router.message(Command("start"), StateFilter("*"))
+async def start_cmd(message: Message, state: FSMContext):
+    await message.answer("Welcome!")
+
+
 
 load_dotenv()
 
@@ -20,6 +31,8 @@ WEBHOOK_PATH = f"/webhook/{WEBHOOK_SECRET}"
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+dp.include_router(router)
+
 
 
 DB_NAME = "users.db"
