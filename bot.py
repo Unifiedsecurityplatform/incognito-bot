@@ -14,6 +14,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
+
 # Load .env
 load_dotenv()
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -249,7 +250,7 @@ async def handle_swipe(call: types.CallbackQuery):
 async def main():
     await create_db()
     print("Bot is polling...")
-    await dp.start_polling()
+    await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
     import asyncio
