@@ -1,8 +1,5 @@
-aiosqlite==0.21.0
-typing_extensions==4.13.2
-python-dotenv==1.0.1
 aiogram==3.4.1
-aiohttp
-fastapi
-uvicorn
-gunicorn
+aiohttp==3.9.3
+aiosqlite==0.20.0
+python-dotenv==1.0.1
+gunicorn==21.2.0

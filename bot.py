@@ -1,42 +1,45 @@
 import os
 import asyncio
 import aiosqlite
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import (
+    Message, CallbackQuery,
+    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
+    InlineKeyboardMarkup, InlineKeyboardButton
+)
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import Command, StateFilter
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import setup_application
 from dotenv import load_dotenv
-from aiogram import Router, F
-from aiogram.filters import Command, StateFilter
-from aiogram.types import Message
 
-router = Router()
-
-@router.message(Command("start"), StateFilter("*"))
-async def start_cmd(message: Message, state: FSMContext):
-    await message.answer("Welcome!")
-
-
-
+# === Load environment variables ===
 load_dotenv()
-
 API_TOKEN = os.getenv("BOT_TOKEN")
 BASE_WEBHOOK_URL = os.getenv("BASE_WEBHOOK_URL", "https://incognito-bot.onrender.com")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "supersecret123456")
 WEBHOOK_PATH = f"/webhook/{WEBHOOK_SECRET}"
+DB_NAME = "users.db"
 
+# === Bot & Dispatcher Setup ===
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+router = Router()
 dp.include_router(router)
 
+# === States ===
+class Onboarding(StatesGroup):
+    nickname = State()
+    gender = State()
+    interested_in = State()
+    photo = State()
+    bio = State()
+    location = State()
 
-
-DB_NAME = "users.db"
-
+# === DB Setup ===
 async def create_db():
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("""
@@ -58,81 +61,67 @@ async def create_db():
         """)
         await db.commit()
 
-class ProfileForm(StatesGroup):
-    gender = State()
-    interested_in = State()
-    photo = State()
-    bio = State()
-    location = State()
-
-class Onboarding(StatesGroup):
-    nickname = State()
-    gender = State()
-    interested_in = State()
-    photo = State()
-    bio = State()
-    location = State()
-
-@dp.message_handler(commands=['start'], state="*")
-async def cmd_start(message: types.Message, state: FSMContext):
-    await state.finish()
+# === Handlers ===
+@router.message(Command("start"), StateFilter("*"))
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer("Hey, gorgeous 😘 What should I call you here? (Type your nickname)")
-    await Onboarding.nickname.set()
+    await state.set_state(Onboarding.nickname)
 
-@dp.message_handler(state=Onboarding.nickname)
-async def process_nickname(message: types.Message, state: FSMContext):
+@router.message(Onboarding.nickname)
+async def process_nickname(message: Message, state: FSMContext):
     nickname = message.text.strip()
     if len(nickname) > 20:
         await message.answer("That’s quite a long name! Keep it short & sweet, please.")
         return
     await state.update_data(nickname=nickname)
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add("👨 Man", "👩 Woman", "🏳️ Other")
-    await message.answer("Lovely name! Now tell me, are you a 👨 Man, 👩 Woman, or something more intriguing? (Choose one)", reply_markup=kb)
-    await Onboarding.gender.set()
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True, keyboard=[
+        [KeyboardButton(text="👨 Man"), KeyboardButton(text="👩 Woman"), KeyboardButton(text="🏳️ Other")]
+    ])
+    await message.answer("Lovely name! Now tell me, are you a 👨 Man, 👩 Woman, or something more intriguing?", reply_markup=kb)
+    await state.set_state(Onboarding.gender)
 
-@dp.message_handler(lambda m: m.text in ["👨 Man", "👩 Woman", "🏳️ Other"], state=Onboarding.gender)
-async def process_gender(message: types.Message, state: FSMContext):
+@router.message(Onboarding.gender, F.text.in_(["👨 Man", "👩 Woman", "🏳️ Other"]))
+async def process_gender(message: Message, state: FSMContext):
     gender = message.text
     await state.update_data(gender=gender)
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add("👩 Women", "👨 Men", "🔀 Both")
-    await message.answer("Oooh, a lady of mystery! Who are you hoping to find here? 👩 Women, 👨 Men, or 🔀 Both?", reply_markup=kb)
-    await Onboarding.interested_in.set()
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True, keyboard=[
+        [KeyboardButton(text="👩 Women"), KeyboardButton(text="👨 Men"), KeyboardButton(text="🔀 Both")]
+    ])
+    await message.answer("Oooh, a lady of mystery! Who are you hoping to find here?", reply_markup=kb)
+    await state.set_state(Onboarding.interested_in)
 
-@dp.message_handler(lambda m: m.text in ["👩 Women", "👨 Men", "🔀 Both"], state=Onboarding.interested_in)
-async def process_interested_in(message: types.Message, state: FSMContext):
-    interested_in = message.text
-    await state.update_data(interested_in=interested_in)
+@router.message(Onboarding.interested_in, F.text.in_(["👩 Women", "👨 Men", "🔀 Both"]))
+async def process_interested_in(message: Message, state: FSMContext):
+    await state.update_data(interested_in=message.text)
+    await message.answer("Perfect! Now, share a photo that'll make hearts skip a beat 💓", reply_markup=ReplyKeyboardRemove())
+    await state.set_state(Onboarding.photo)
 
-    await message.answer("Perfect! Now, share a photo that'll make hearts skip a beat 💓 (Please send me a photo)", reply_markup=ReplyKeyboardRemove())
-    await Onboarding.photo.set()
-
-@dp.message_handler(content_types=types.ContentType.PHOTO, state=Onboarding.photo)
-async def process_photo(message: types.Message, state: FSMContext):
+@router.message(Onboarding.photo, F.photo)
+async def process_photo(message: Message, state: FSMContext):
     photo = message.photo[-1].file_id
     await state.update_data(photo_id=photo)
+    await message.answer("Got it! Now, tell me something naughty in your bio 😏")
+    await state.set_state(Onboarding.bio)
 
-    await message.answer("Got it! Now, tell me something naughty in your bio 😏 (Keep it short and spicy!)")
-    await Onboarding.bio.set()
-
-@dp.message_handler(state=Onboarding.bio)
-async def process_bio(message: types.Message, state: FSMContext):
+@router.message(Onboarding.bio)
+async def process_bio(message: Message, state: FSMContext):
     bio = message.text.strip()
     if len(bio) > 200:
         await message.answer("Whoa, too long! Keep it spicy but short, please.")
         return
     await state.update_data(bio=bio)
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add(KeyboardButton("Share my location 📍", request_location=True))
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True, keyboard=[
+        [KeyboardButton(text="Share my location 📍", request_location=True)]
+    ])
     await message.answer("Almost done! Share your location discreetly so we can find local matches.", reply_markup=kb)
-    await Onboarding.location.set()
+    await state.set_state(Onboarding.location)
 
-@dp.message_handler(content_types=types.ContentType.LOCATION, state=Onboarding.location)
-async def process_location(message: types.Message, state: FSMContext):
+@router.message(Onboarding.location, F.location)
+async def process_location(message: Message, state: FSMContext):
     location_str = f"{message.location.latitude},{message.location.longitude}"
     data = await state.get_data()
 
@@ -150,11 +139,11 @@ async def process_location(message: types.Message, state: FSMContext):
         ))
         await db.commit()
 
-    await state.finish()
-    await message.answer("You’re all set, darling 🔥 Get ready to find your secret connections — use /find to start!", reply_markup=ReplyKeyboardRemove())
+    await state.clear()
+    await message.answer("You’re all set, darling 🔥 Use /find to discover your secret connections!", reply_markup=ReplyKeyboardRemove())
 
-@dp.message_handler(commands=["find"])
-async def find_matches(message: types.Message):
+@router.message(Command("find"))
+async def find_matches(message: Message):
     user_id = message.from_user.id
 
     async with aiosqlite.connect(DB_NAME) as db:
@@ -176,6 +165,7 @@ async def find_matches(message: types.Message):
         AND gender IN (?, 'Both')
         AND interested_in IN (?, 'Both')
         AND user_id NOT IN ({})
+
         LIMIT 1
         """.format(",".join("?" * len(seen)) if seen else "0")
 
@@ -185,22 +175,16 @@ async def find_matches(message: types.Message):
 
         if match:
             match_id, match_gender, photo_id, bio = match
-            kb = InlineKeyboardMarkup()
-            kb.add(
-                InlineKeyboardButton("❤️ Like", callback_data=f"like:{match_id}"),
-                InlineKeyboardButton("❌ Skip", callback_data=f"skip:{match_id}")
-            )
-            await bot.send_photo(
-                message.chat.id,
-                photo=photo_id,
-                caption=f"{match_gender}\n\n{bio}",
-                reply_markup=kb
-            )
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❤️ Like", callback_data=f"like:{match_id}"),
+                 InlineKeyboardButton(text="❌ Skip", callback_data=f"skip:{match_id}")]
+            ])
+            await bot.send_photo(message.chat.id, photo=photo_id, caption=f"{match_gender}\n\n{bio}", reply_markup=kb)
         else:
             await message.answer("No matches found right now. Try again later.")
 
-@dp.callback_query_handler(lambda c: c.data.startswith(("like:", "skip:")))
-async def handle_swipe(call: types.CallbackQuery):
+@router.callback_query(F.data.startswith(("like:", "skip:")))
+async def handle_swipe(call: CallbackQuery):
     action, target_id = call.data.split(":")
     user_id = call.from_user.id
     target_id = int(target_id)
@@ -215,9 +199,10 @@ async def handle_swipe(call: types.CallbackQuery):
                     await bot.send_message(user_id, "🔥 It's a match!")
                     await bot.send_message(target_id, "🔥 It's a match!")
 
-        await call.message.delete()
-        await find_matches(call.message)
+    await call.message.delete()
+    await find_matches(call.message)
 
+# === Webhook setup ===
 async def on_startup(app):
     await create_db()
     await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
