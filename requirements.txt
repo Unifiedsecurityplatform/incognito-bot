@@ -1,5 +1,6 @@
-aiosqlite==0.21.0
-typing_extensions==4.13.2
-python-dotenv==1.0.1
 aiogram==3.4.1
-aiohttp
+aiohttp==3.9.3
+aiosqlite==0.21.0
+python-dotenv==1.0.1
+typing_extensions==4.13.0
+
